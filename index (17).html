@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="uz"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Do'konim</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<!--
+SOZLASH (bir marta):
+1) console.firebase.google.com -> yangi loyiha -> Web ilova (</>) qo'shing, config'ni pastdagi CFG ga qo'ying.
+2) Authentication -> Email/Password yoqing, o'zingizning gmail+parol bilan foydalanuvchi yarating.
+3) Firestore Database yarating. "admins" kolleksiyasida hujjat ID = gmail (kichik harflarda), maydon: main = true (boolean).
+4) Firestore -> Rules ga quyidagini qo'ying:
+rules_version='2'; service cloud.firestore { match /databases/{d}/documents {
+ function adm(){ return request.auth!=null && exists(/databases/$(d)/documents/admins/$(request.auth.token.email)); }
+ function main(){ return adm() && get(/databases/$(d)/documents/admins/$(request.auth.token.email)).data.main==true; }
+ match /products/{i}{ allow read:if true; allow write:if adm(); }
+ match /orders/{i}{ allow create:if true; allow read,update,delete:if adm(); }
+ match /reviews/{i}{ allow read:if true; allow create:if true; allow update,delete:if adm(); }
+ match /events/{i}{ allow create:if true; allow read:if adm(); }
+ match /admins/{e}{ allow read:if request.auth!=null; allow write:if main(); }
+}}
+Hamkor admin: asosiy admin panelda hamkorning gmailini qo'shadi, hamkor esa "Ro'yxatdan o'tish" tugmasi orqali shu gmail bilan parol yaratadi.
+Admin panel: saytmanzili/#admin
+-->
+<style>
+:root{--p:#ff6a00;--n:#1a1f3c;--bg:#f3f5fa;--g:#16a34a;--r:#dc2626;--y:#eab308;--t:#1f2430;--m:#6b7280}
+*{box-sizing:border-box}body{margin:0;font:16px/1.5 "Trebuchet MS",Verdana,sans-serif;color:var(--t);background:var(--bg)}
+h1,h2,h3{font-family:Georgia,serif;margin:.2em 0}
+button,input,textarea,select{font:inherit}
+input,textarea,select{width:100%;padding:10px 12px;border:1.5px solid #d5d9e4;border-radius:8px;margin:4px 0 10px;background:#fff}
+input:focus,textarea:focus,button:focus-visible{outline:3px solid #ffb27a;border-color:var(--p)}
+.btn{background:var(--p);color:#fff;border:0;padding:11px 20px;border-radius:8px;font-weight:700;cursor:pointer}
+.btn.s{background:var(--n)}.btn.l{background:#e8ebf3;color:var(--n)}.btn.sm{padding:6px 12px;font-size:14px}.btn.red{background:var(--r)}
+.hero{background:var(--n);color:#fff;text-align:center;padding:64px 20px 56px;border-bottom:6px solid var(--p)}
+.logo{font:700 34px Georgia,serif;letter-spacing:.5px}.logo b{color:var(--p)}
+.hero p{max-width:520px;margin:12px auto 0;color:#cfd4ea;font-size:18px}
+.wrap{max-width:1100px;margin:0 auto;padding:28px 16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:18px}
+.card{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 2px 10px #1a1f3c18;cursor:pointer}
+.card img{width:100%;aspect-ratio:1;object-fit:cover;display:block;background:#e8ebf3}
+.card div{padding:12px 14px}.price{color:var(--p);font-weight:800;font-size:18px}
+.modal{position:fixed;inset:0;background:#0009;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:16px;z-index:999}
+.box{background:#fff;border-radius:14px;max-width:640px;width:100%;padding:20px;position:relative;margin:auto}
+.x{position:absolute;right:12px;top:8px;font-size:28px;background:none;border:0;cursor:pointer}
+.big{width:100%;border-radius:10px;max-height:420px;object-fit:cover}
+.th{display:flex;gap:8px;margin:8px 0;overflow:auto}.th img{width:64px;height:64px;object-fit:cover;border-radius:8px;cursor:pointer}
+.stars span{font-size:30px;color:#cbd0dc;cursor:pointer}.stars span.on{color:var(--y)}
+.rev{background:#fff;border-radius:10px;padding:12px 14px;margin:10px 0;border-left:4px solid var(--p)}
+.rev img{max-width:160px;border-radius:8px;display:block}.reply{background:#fff3e8;border-radius:8px;padding:8px 10px;margin-top:8px}
+footer{background:var(--n);color:#cfd4ea;text-align:center;padding:30px 16px}footer a{color:#fff;margin:0 10px;font-weight:700}
+.err{color:var(--r);font-size:14px;min-height:18px}
+#map,#amap{height:260px;border-radius:10px;margin:6px 0}#amap{height:320px}
+/* admin */
+.adm{display:flex;min-height:100vh}.side{width:200px;background:var(--n);color:#fff;padding:16px 8px;flex-shrink:0}
+.side h3{padding:0 10px}.side a{display:block;padding:11px 12px;border-radius:8px;color:#cfd4ea;cursor:pointer;margin:3px 0}
+.side a.on{background:var(--p);color:#fff}.main{flex:1;padding:18px;min-width:0}
+.row{background:#fff;border-radius:10px;padding:12px 14px;margin:10px 0;box-shadow:0 1px 6px #1a1f3c14}
+.badge{display:inline-block;color:#fff;border-radius:20px;padding:2px 12px;font-size:13px;font-weight:700}
+.new{background:var(--g)}.talk{background:var(--r)}.done{background:var(--y);color:#222}
+.tabs button{margin:0 6px 6px 0}.c{font-size:14px;color:var(--m);border-top:1px dashed #d5d9e4;padding:4px 0}
+.bar{height:10px;border-radius:5px;background:var(--p);margin:3px 0}.bar.b{background:var(--n)}
+.login{max-width:360px;margin:12vh auto;background:#fff;padding:24px;border-radius:14px}
+.imgs img{width:70px;height:70px;object-fit:cover;border-radius:8px;margin:2px;cursor:pointer}
+@media(max-width:700px){.adm{flex-direction:column}.side{width:100%;display:flex;flex-wrap:wrap;gap:4px}.side h3{width:100%}}
+</style></head><body><div id="app"></div><div id="modal"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+const CFG={apiKey:"",authDomain:"",projectId:"",appId:""};  // <-- Firebase config
+const SHOP={a:"Do'kon",b:"im",tag:"Sifatli mahsulotlar, halol narxlar. Tanlang va buyurtma bering — operator o'zi bog'lanadi.",
+ tg:"https://t.me/",ig:"https://instagram.com/",tel:"+998900000000"};
+firebase.initializeApp(CFG);const auth=firebase.auth(),db=firebase.firestore(),FV=firebase.firestore.FieldValue;
+const $=s=>document.querySelector(s);
+const E=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money=n=>Number(n||0).toLocaleString('ru-RU')+" so'm";
+const list=async(c,o)=>(await(o?db.collection(c).orderBy(o,'desc'):db.collection(c)).get()).docs.map(d=>({id:d.id,...d.data()}));
+const fmt=t=>new Date(t).toLocaleString('uz-UZ',{dateStyle:'short',timeStyle:'short'});
+function shrink(file){return new Promise(r=>{const fr=new FileReader();fr.onload=()=>{const im=new Image();im.onload=()=>{const k=Math.min(1,700/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=im.width*k;c.height=im.height*k;c.getContext('2d').drawImage(im,0,0,c.width,c.height);r(c.toDataURL('image/jpeg',.7))};im.src=fr.result};fr.readAsDataURL(file)})}
+function closeM(){$('#modal').innerHTML=''}
+function modal(h){$('#modal').innerHTML=`<div class="modal"><div class="box"><button class="x" onclick="closeM()" aria-label="Yopish">×</button>${h}</div></div>`}
+function phoneOk(v){let d=v.replace(/\D/g,'');if(d.length==9)d='998'+d;return /^998(33|50|55|61|62|65|66|67|69|70|71|72|73|74|75|76|77|78|79|88|9[0-9])\d{7}$/.test(d)?'+'+d:null}
+
+/* ========== MIJOZ SAYTI ========== */
+let P=[],R=[],cur=null,stars=0,pmap,pmark;
+async function pub(){
+ $('#app').innerHTML=`<div class="hero"><div class="logo">${E(SHOP.a)}<b>${E(SHOP.b)}</b></div><p>${E(SHOP.tag)}</p></div>
+ <div class="wrap"><h2>Mahsulotlar</h2><div class="grid" id="pl">Yuklanmoqda…</div>
+ <h2 style="margin-top:40px">Fikr bildiring</h2><div class="row"><div class="stars" id="st">${[1,2,3,4,5].map(i=>`<span onclick="setS(${i})">★</span>`).join('')}</div>
+ <input id="rn" placeholder="Ismingiz"><textarea id="rt" rows="3" placeholder="Fikringiz"></textarea><input type="file" id="rf" accept="image/*">
+ <div class="err" id="re"></div><button class="btn" onclick="sendR()">Fikrni yuborish</button></div><div id="rl"></div></div>
+ <footer><p>Biz bilan bog'laning</p><a href="${E(SHOP.tg)}" target="_blank">Telegram</a><a href="${E(SHOP.ig)}" target="_blank">Instagram</a><a href="tel:${E(SHOP.tel)}">${E(SHOP.tel)}</a>
+ <p><a href="#admin" style="font-weight:400;font-size:12px;opacity:.5">admin</a></p></footer>`;
+ try{P=(await list('products','createdAt')).filter(p=>!p.archived);R=await list('reviews','createdAt')}catch(e){$('#pl').textContent="Ma'lumot yuklanmadi. Firebase sozlamalarini tekshiring.";return}
+ $('#pl').innerHTML=P.length?P.map(p=>`<div class="card" onclick="openP('${p.id}')"><img src="${p.images?.[0]||''}" alt=""><div><b>${E(p.name)}</b><div class="price">${money(p.price)}</div></div></div>`).join(''):'Hozircha mahsulot yo\'q.';
+ renderR()}
+function renderR(){$('#rl').innerHTML=R.map(r=>`<div class="rev"><b>${E(r.name)}</b> <span style="color:var(--y)">${'★'.repeat(r.stars)}</span><span style="color:#cbd0dc">${'★'.repeat(5-r.stars)}</span><br>${E(r.text)}${r.img?`<img src="${r.img}" alt="">`:''}${r.reply?`<div class="reply"><b>Do'kon javobi:</b> ${E(r.reply)}</div>`:''}</div>`).join('')}
+function setS(n){stars=n;document.querySelectorAll('#st span').forEach((s,i)=>s.classList.toggle('on',i<n))}
+async function sendR(){const n=$('#rn').value.trim(),t=$('#rt').value.trim();if(!stars||!n||!t){$('#re').textContent="Yulduzcha, ism va fikrni kiriting.";return}
+ const f=$('#rf').files[0];await db.collection('reviews').add({name:n,text:t,stars,img:f?await shrink(f):'',reply:'',createdAt:Date.now()});stars=0;R=await list('reviews','createdAt');pub();setTimeout(()=>{R=R;renderR()},0)}
+function openP(id){cur=P.find(p=>p.id==id);db.collection('events').add({pid:id,type:'view',ts:Date.now()}).catch(()=>{});
+ const im=cur.images||[];modal(`<img class="big" id="bi" src="${im[0]||''}" alt=""><div class="th">${im.map(s=>`<img src="${s}" onclick="$('#bi').src=this.src" alt="">`).join('')}</div>
+ <h2>${E(cur.name)}</h2><div class="price">${money(cur.price)}</div><p>${E(cur.desc)}</p><p style="white-space:pre-line;color:var(--m)">${E(cur.specs)}</p>
+ <button class="btn" onclick="orderForm()">Buyurtma berish</button>`)}
+function orderForm(){modal(`<h2>Buyurtma: ${E(cur.name)}</h2><label>Ism familya</label><input id="on" placeholder="Ali Valiyev">
+ <label>Asosiy telefon</label><input id="o1" type="tel" placeholder="+998 90 123 45 67"><label>Qo'shimcha telefon</label><input id="o2" type="tel" placeholder="+998 91 123 45 67">
+ <label>Manzil</label><textarea id="oa" rows="2" placeholder="Viloyat, tuman, ko'cha, uy"></textarea><small>Xaritada joyni belgilang:</small><div id="map"></div>
+ <div class="err" id="oe"></div><button class="btn" onclick="sendO()">Buyurtmani tasdiqlash</button>`);
+ pmark=null;pmap=L.map('map').setView([41.311,69.28],11);L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(pmap);
+ pmap.on('click',e=>{pmark?pmark.setLatLng(e.latlng):pmark=L.marker(e.latlng).addTo(pmap)});setTimeout(()=>pmap.invalidateSize(),200)}
+async function sendO(){const n=$('#on').value.trim(),a=$('#oa').value.trim(),p1=phoneOk($('#o1').value),p2=phoneOk($('#o2').value),e=$('#oe');
+ if(n.split(/\s+/).length<2)return e.textContent="Ism va familyani kiriting.";
+ if(!p1)return e.textContent="Asosiy raqam noto'g'ri. Namuna: +998 90 123 45 67";
+ if(!p2)return e.textContent="Qo'shimcha raqam noto'g'ri. Namuna: +998 91 123 45 67";
+ if(a.length<5)return e.textContent="Manzilni kiriting.";
+ const no='B-'+Math.floor(100000+Math.random()*900000),ll=pmark?pmark.getLatLng():null;
+ try{await db.collection('orders').add({no,name:n,phone1:p1,phone2:p2,address:a,lat:ll?.lat??null,lng:ll?.lng??null,pid:cur.id,pname:cur.name,price:cur.price,status:'new',comments:[],createdAt:Date.now()})}catch(x){return e.textContent="Xatolik, qayta urinib ko'ring."}
+ modal(`<h2>Rahmat, buyurtma qabul qilindi!</h2><p>Operatorlarimiz tez orada siz bilan bog'lanadi.</p><p>Buyurtma raqami:</p><h1 style="color:var(--p)">${no}</h1><p>Shu raqamni saqlab qo'ying.</p><button class="btn" onclick="closeM();scrollTo(0,0)">Asosiy sahifa</button>`);}
+
+/* ========== ADMIN ========== */
+let me=null,tab='orders',ofil='new',amap,edImgs=[],ed=null;
+function loginView(msg){$('#app').innerHTML=`<div class="login"><h2>Admin kirish</h2><input id="le" type="email" placeholder="Gmail"><input id="lp" type="password" placeholder="Parol">
+ <div class="err" id="lerr">${msg||''}</div><button class="btn" onclick="login()">Kirish</button> <button class="btn l" onclick="signup()">Ro'yxatdan o'tish</button><p><a href="#">← Saytga qaytish</a></p></div>`}
+const lerr=e=>$('#lerr').textContent={'auth/wrong-password':"Parol noto'g'ri",'auth/invalid-credential':"Gmail yoki parol noto'g'ri",'auth/user-not-found':"Foydalanuvchi topilmadi",'auth/email-already-in-use':"Bu gmail ro'yxatdan o'tgan, \"Kirish\" ni bosing",'auth/weak-password':"Parol kamida 6 belgi"}[e.code]||e.message;
+async function login(){try{await auth.signInWithEmailAndPassword($('#le').value.trim(),$('#lp').value)}catch(e){lerr(e)}}
+async function signup(){try{const em=$('#le').value.trim().toLowerCase();const d=await db.collection('admins').doc(em).get().catch(()=>null);
+ await auth.createUserWithEmailAndPassword(em,$('#lp').value)}catch(e){lerr(e)}}
+auth.onAuthStateChanged(async u=>{if(location.hash!='#admin')return;if(!u)return loginView();
+ const d=await db.collection('admins').doc(u.email.toLowerCase()).get().catch(()=>null);
+ if(!d||!d.exists){await auth.signOut();return loginView("Siz admin sifatida qo'shilmagansiz.")}me={email:u.email,main:!!d.data().main};adm()});
+function route(){location.hash=='#admin'?(me?adm():auth.currentUser?null:loginView()):pub()}
+addEventListener('hashchange',route);
+function adm(){const T=[['orders','Buyurtmalar'],['products','Mahsulotlar'],['stats','Statistika'],['reviews','Fikrlar']];if(me.main)T.push(['admins','Adminlar']);
+ $('#app').innerHTML=`<div class="adm"><div class="side"><h3>Boshqaruv</h3>${T.map(t=>`<a class="${tab==t[0]?'on':''}" onclick="tab='${t[0]}';adm()">${t[1]}</a>`).join('')}<a onclick="auth.signOut().then(()=>{me=null;loginView()})">Chiqish</a></div><div class="main" id="mn">Yuklanmoqda…</div></div>`;
+ ({orders:oTab,products:pTab,stats:sTab,reviews:rTab,admins:aTab})[tab]()}
+
+/* Buyurtmalar */
+const SL={new:['Yangi','new'],talk:['Gaplashilgan','talk'],done:['Yetkazilgan (sotilgan)','done']},COL={new:'#16a34a',talk:'#dc2626',done:'#eab308'};
+async function oTab(){const O=await list('orders','createdAt');
+ $('#mn').innerHTML=`<h2>Buyurtmalar</h2><div id="amap"></div><div class="tabs">${Object.keys(SL).map(k=>`<button class="btn sm ${ofil==k?'':'l'}" onclick="ofil='${k}';oTab()">${SL[k][0]} (${O.filter(o=>o.status==k).length})</button>`).join('')}</div>
+ ${O.filter(o=>o.status==ofil).map(o=>`<div class="row"><span class="badge ${SL[o.status][1]}">${SL[o.status][0]}</span> <b>${o.no}</b> · ${fmt(o.createdAt)}<br>
+ <b>${E(o.name)}</b> · ${E(o.phone1)} · ${E(o.phone2)}<br>${E(o.pname)} — ${money(o.price)}<br>Manzil: ${E(o.address)}
+ ${(o.comments||[]).map(c=>`<div class="c"><b>${E(c.by)}</b> (${fmt(c.ts)}): ${E(c.text)}</div>`).join('')}
+ <input id="c${o.id}" placeholder="Izoh yozing…"><button class="btn sm s" onclick="cm('${o.id}')">Izoh qo'shish</button>
+ ${o.status=='new'?`<button class="btn sm" style="background:var(--r)" onclick="st('${o.id}','talk')">Gaplashildi</button>`:''}
+ ${o.status=='talk'?`<button class="btn sm" style="background:var(--y);color:#222" onclick="if(confirm('Mahsulot yetkazildi va pul qabul qilindimi?'))st('${o.id}','done')">Yetkazildi, pul olindi</button>`:''}</div>`).join('')||'<p>Bu bo\'limda buyurtma yo\'q.</p>'}`;
+ amap=L.map('amap').setView([41.311,69.28],6);L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(amap);
+ const pts=O.filter(o=>o.lat);pts.forEach(o=>L.marker([o.lat,o.lng],{icon:L.divIcon({className:'',html:`<div style="width:20px;height:20px;border-radius:50%;background:${COL[o.status]};border:3px solid #fff;box-shadow:0 0 4px #000"></div>`})}).addTo(amap).bindPopup(`${o.no}<br>${E(o.name)}<br>${E(o.phone1)}`));
+ if(pts.length)amap.fitBounds(pts.map(o=>[o.lat,o.lng]),{maxZoom:13,padding:[30,30]})}
+const st=async(id,s)=>{await db.collection('orders').doc(id).update({status:s,['t_'+s]:Date.now()});oTab()};
+const cm=async id=>{const v=$('#c'+id).value.trim();if(!v)return;await db.collection('orders').doc(id).update({comments:FV.arrayUnion({by:me.email,text:v,ts:Date.now()})});oTab()};
+
+/* Mahsulotlar */
+async function pTab(){const A=await list('products','createdAt');window.AP=A;
+ $('#mn').innerHTML=`<h2>Mahsulotlar</h2><button class="btn" onclick="pForm()">+ Yangi mahsulot</button>${A.map(p=>`<div class="row" style="${p.archived?'opacity:.55':''}"><div class="imgs">${(p.images||[]).slice(0,1).map(s=>`<img src="${s}">`).join('')}</div><b>${E(p.name)}</b> — ${money(p.price)} ${p.archived?'(arxivda)':''}<br>
+ <button class="btn sm s" onclick="pForm('${p.id}')">Tahrirlash</button> <button class="btn sm l" onclick="arch('${p.id}',${!p.archived})">${p.archived?'Arxivdan chiqarish':'Arxivga'}</button></div>`).join('')}`}
+function pForm(id){ed=id?AP.find(p=>p.id==id):{name:'',price:'',desc:'',specs:'',images:[]};edImgs=[...(ed.images||[])];
+ modal(`<h2>${id?'Tahrirlash':'Yangi mahsulot'}</h2><input id="pn" placeholder="Nomi" value="${E(ed.name)}"><input id="pp" type="number" placeholder="Narxi (so'm)" value="${ed.price}">
+ <textarea id="pd" rows="3" placeholder="Tavsif">${E(ed.desc)}</textarea><textarea id="ps" rows="4" placeholder="Xususiyatlari (har biri yangi qatorda)">${E(ed.specs)}</textarea>
+ <input type="file" id="pf" accept="image/*" multiple onchange="addI(this)"><div class="imgs" id="pi"></div><button class="btn" onclick="saveP('${id||''}')">Saqlash</button>`);showI()}
+const showI=()=>$('#pi').innerHTML=edImgs.map((s,i)=>`<img src="${s}" title="O'chirish" onclick="edImgs.splice(${i},1);showI()">`).join('');
+async function addI(el){for(const f of el.files)edImgs.push(await shrink(f));showI()}
+async function saveP(id){const d={name:$('#pn').value.trim(),price:+$('#pp').value,desc:$('#pd').value,specs:$('#ps').value,images:edImgs};if(!d.name||!d.price)return alert('Nomi va narxini kiriting');
+ id?await db.collection('products').doc(id).update(d):await db.collection('products').add({...d,archived:false,createdAt:Date.now()});closeM();pTab()}
+const arch=async(id,v)=>{await db.collection('products').doc(id).update({archived:v});pTab()};
+
+/* Statistika */
+let per='week';
+async function sTab(){const[A,V,O]=await Promise.all([list('products'),list('events'),list('orders')]);
+ const now=new Date(),sod=new Date(now.getFullYear(),now.getMonth(),now.getDate()).getTime(),D=864e5;
+ const SS={qish:[12,1,2],bahor:[3,4,5],yoz:[6,7,8],kuz:[9,10,11]};
+ const ok=t=>per=='day'?t>=sod:per=='week'?t>=sod-6*D:per=='month'?t>=sod-29*D:SS[per].includes(new Date(t).getMonth()+1);
+ const rows=A.map(p=>({n:p.name,v:V.filter(e=>e.pid==p.id&&ok(e.ts)).length,s:O.filter(o=>o.pid==p.id&&o.status=='done'&&ok(o.t_done||o.createdAt)).length})).sort((a,b)=>b.v-a.v);
+ const mv=Math.max(1,...rows.map(r=>r.v)),ms=Math.max(1,...rows.map(r=>r.s));
+ $('#mn').innerHTML=`<h2>Statistika</h2><div class="tabs">${[['day','Bugun'],['week','Hafta'],['month','Oy'],['qish','Qish'],['bahor','Bahor'],['yoz','Yoz'],['kuz','Kuz']].map(x=>`<button class="btn sm ${per==x[0]?'':'l'}" onclick="per='${x[0]}';sTab()">${x[1]}</button>`).join('')}</div>
+ ${rows.map(r=>`<div class="row"><b>${E(r.n)}</b><br>Qiziqish (ko'rilgan): ${r.v}<div class="bar" style="width:${r.v/mv*100}%"></div>Sotilgan: ${r.s}<div class="bar b" style="width:${r.s/ms*100}%"></div></div>`).join('')||'Ma\'lumot yo\'q'}`}
+
+/* Fikrlar */
+async function rTab(){const A=await list('reviews','createdAt');
+ $('#mn').innerHTML=`<h2>Fikrlar</h2>${A.map(r=>`<div class="row"><b>${E(r.name)}</b> <span style="color:var(--y)">${'★'.repeat(r.stars)}</span> · ${fmt(r.createdAt)}<br>${E(r.text)}${r.img?`<br><img src="${r.img}" style="max-width:140px;border-radius:8px">`:''}
+ ${r.reply?`<div class="reply">${E(r.reply)}</div>`:''}<input id="r${r.id}" placeholder="Javob yozing…" value="${E(r.reply||'')}"><button class="btn sm s" onclick="rep('${r.id}')">Javobni saqlash</button></div>`).join('')||'Fikrlar yo\'q'}`}
+const rep=async id=>{await db.collection('reviews').doc(id).update({reply:$('#r'+id).value.trim()});rTab()};
+
+/* Adminlar */
+async function aTab(){const A=await list('admins');
+ $('#mn').innerHTML=`<h2>Adminlar</h2><div class="row"><input id="ae" type="email" placeholder="Hamkor gmaili"><button class="btn" onclick="addA()">Admin qo'shish</button><p style="color:var(--m);font-size:14px">Hamkor kirish sahifasida shu gmail bilan "Ro'yxatdan o'tish"ni bosib parol yaratadi.</p></div>
+ ${A.map(a=>`<div class="row">${E(a.id)} ${a.main?'<b>(asosiy)</b>':`<button class="btn sm red" onclick="delA('${E(a.id)}')">O'chirish</button>`}</div>`).join('')}`}
+const addA=async()=>{const e=$('#ae').value.trim().toLowerCase();if(!e)return;await db.collection('admins').doc(e).set({main:false});aTab()};
+const delA=async e=>{if(confirm(e+' o\'chirilsinmi?')){await db.collection('admins').doc(e).delete();aTab()}};
+route();
+</script></body></html>
