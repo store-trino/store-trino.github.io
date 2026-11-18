@@ -293,7 +293,7 @@ async function sendO(){const n=$('#on').value.trim(),a=$('#oa').value.trim(),p1=
  const no=newNo(),now=Date.now(),pn=String(cur.name).slice(0,200),bt=db.batch();
  bt.set(db.collection('orders').doc(),{no,name:n,phone1:p1,phone2:p2,address:a,lat,lng,geo,pid:cur.id,pname:pn,price:cur.price,qty,opts:ordOpts,total:cur.price*qty,status:'new',comments:[],createdAt:now});
  bt.set(db.collection('tracks').doc(no),{status:'new',pname:pn,createdAt:now});
- try{await bt.commit()}catch(x){b.disabled=false;b.textContent='Buyurtmani tasdiqlash';return e.textContent="Xatolik, qayta urinib ko'ring."}
+ try{await bt.commit()}catch(x){console.error(x);b.disabled=false;b.textContent='Buyurtmani tasdiqlash';return e.textContent="Xatolik: "+(x.code||x.message)}
  notifyTg({no,name:n,phone1:p1,phone2:p2,address:a,lat,lng,geo,pname:pn,price:cur.price,qty,opts:ordOpts,total:cur.price*qty});
  modal(`<h2>Rahmat, buyurtma qabul qilindi!</h2><p>Operatorlarimiz tez orada siz bilan bog'lanadi.</p><p>Buyurtma raqami:</p><h1 style="color:var(--pd)">${no}</h1><p>Shu raqamni saqlab qo'ying. Buyurtma holatini saytdagi «Buyurtma holati» bo'limidan shu raqam orqali bilib olasiz.</p><button class="btn" onclick="closeAll();scrollTo(0,0)">Asosiy sahifa</button>`,2);}
 
