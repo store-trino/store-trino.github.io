@@ -183,7 +183,7 @@ const AL='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 function newNo(){const a=new Uint8Array(8);crypto.getRandomValues(a);return 'B-'+[...a].map(x=>AL[x%32]).join('')}
 function viewLog(id){const k='v_'+id+'_'+new Date().toDateString();let s=null;try{s=localStorage.getItem(k)}catch(e){}
  if(!s){db.collection('events').add({pid:id,type:'view',ts:Date.now()}).catch(()=>{});try{localStorage.setItem(k,'1')}catch(e){}}}
-const NOTIFY_URL='';/* Cloudflare Worker manzili (Telegram xabari uchun). Bo'sh bo'lsa, xabar yuborilmaydi. */
+const NOTIFY_URL='https://trino-notify.eldorravshanov200730.workers.dev/';/* Cloudflare Worker manzili (Telegram xabari uchun). Bo'sh bo'lsa, xabar yuborilmaydi. */
 function notifyTg(o){if(!NOTIFY_URL)return;try{fetch(NOTIFY_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o),keepalive:true}).catch(()=>{})}catch(e){}}
 function copyTxt(t,m){(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast(m),()=>{prompt('Nusxalang:',t)})}
 const prodLink=id=>location.origin+location.pathname+'#p-'+id;
